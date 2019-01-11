@@ -28,8 +28,7 @@
 // </e>
 
 #ifdef __CC_ARM
-extern int Image$$RW_IRAM1$$ZI$$Limit;
-#define HEAP_BEGIN    (&Image$$RW_IRAM1$$ZI$$Limit)
+#define HEAP_BEGIN    (0x24000000)  // bind start addr to the AXI SRAM, this is the largest continues RAM in H7
 #elif __ICCARM__
 #pragma section="HEAP"
 #define HEAP_BEGIN    (__segment_end("HEAP"))
@@ -41,7 +40,7 @@ extern int __bss_end;
 // <o> Internal SRAM memory size[Kbytes] <8-64>
 //  <i>Default: 64
 #define STM32_SRAM_SIZE   (512 * 1024)
-#define HEAP_END          (0x24000000 + STM32_SRAM_SIZE)
+#define HEAP_END          (HEAP_BEGIN + STM32_SRAM_SIZE)
 
 void rt_hw_board_init(void);
 
