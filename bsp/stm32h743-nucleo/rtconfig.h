@@ -154,5 +154,6 @@
 
 #define RT_USING_UART3
 #define RT_USING_LED
+#define RT_USING_USER_BUTTON
 
 #endif
