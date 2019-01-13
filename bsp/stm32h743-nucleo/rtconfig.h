@@ -153,5 +153,6 @@
 /* samples: kernel and components samples */
 
 #define RT_USING_UART3
+#define RT_USING_LED
 
 #endif
