@@ -21,6 +21,10 @@ if GetDepend('RT_USING_PIN'):
 if GetDepend('RT_USING_LED'):
     src += ['drv_led.c']
 
+# add button support
+if GetDepend('RT_USING_USER_BUTTON'):
+    src += ['drv_button.c']
+
 CPPPATH = [cwd]
 
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)

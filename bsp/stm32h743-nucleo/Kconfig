@@ -32,3 +32,8 @@ config RT_USING_LED
     bool "Using LED"
     select RT_USING_PIN
     default n
+
+config RT_USING_USER_BUTTON
+    bool "Using User Button"
+    select RT_USING_PIN
+    default n
