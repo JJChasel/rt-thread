@@ -27,3 +27,8 @@ config RT_USING_UART3
     bool "Using uart3"
     select RT_USING_SERIAL
     default y
+
+config RT_USING_LED
+    bool "Using LED"
+    select RT_USING_PIN
+    default n

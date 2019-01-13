@@ -17,6 +17,10 @@ if GetDepend('RT_USING_LWIP'):
 if GetDepend('RT_USING_PIN'):
     src += ['drv_gpio.c']
 
+# add led support
+if GetDepend('RT_USING_LED'):
+    src += ['drv_led.c']
+
 CPPPATH = [cwd]
 
 group = DefineGroup('Drivers', src, depend = [''], CPPPATH = CPPPATH)

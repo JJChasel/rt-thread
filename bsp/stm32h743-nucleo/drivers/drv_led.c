@@ -7,10 +7,19 @@
  * Date           Author       Notes
  * 2017-08-25     LongfeiMa    the first version for stm32h7xx
  */
-#include <rtthread.h>
+#include <rtconfig.h>
+#include <rtdevice.h>
 #include <board.h>
 
 #include "drv_led.h"
+
+#include <string.h>
+#include <stdbool.h>
+
+void led_write(LedDesc led, LedStatus onoff)
+{
+	rt_pin_write((rt_base_t)led, (BOARD_LED_ON == onoff) ? PIN_HIGH : PIN_LOW);
+}
 
 static void led_thread_entry(void *parameter)
 {
@@ -23,6 +32,7 @@ static void led_thread_entry(void *parameter)
 	}
 }
 
+#ifndef RT_USING_PIN
 int led_hw_init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStruct;
@@ -39,6 +49,16 @@ int led_hw_init(void)
 	return 0;
 }
 INIT_BOARD_EXPORT(led_hw_init);
+#else
+int led_hw_init(void)
+{	
+	rt_pin_mode((rt_base_t)BOARD_LED_BLUE, PIN_MODE_OUTPUT);
+	rt_pin_mode((rt_base_t)BOARD_LED_RED, PIN_MODE_OUTPUT);
+
+	return 0;
+}
+INIT_APP_EXPORT(led_hw_init);
+#endif
 
 int led_init(void)
 {
@@ -53,4 +73,32 @@ int led_init(void)
 
 	return 0;
 }
-INIT_APP_EXPORT(led_init);
+MSH_CMD_EXPORT(led_init, run led);
+
+int led_ctrl(int arg, char *args[])
+{
+	/* check params */
+	char *help = "param error. eg. \"led_ctrl led2 on\"\n";
+	if (arg != 3)
+	{
+		rt_kprintf("%s", help);
+		return 1;
+	}
+	bool param1_ok = 0 == strcmp(args[1], "led2") || 0 == strcmp(args[1], "led3");
+	bool param2_ok = 0 == strcmp(args[2], "on") || 0 == strcmp(args[2], "off");
+	if (param1_ok && param2_ok)
+	{
+		if (0 == strcmp(args[1], "led2"))
+			led_write(BOARD_LD_2, (0 == strcmp(args[2], "on")) ? BOARD_LED_ON : BOARD_LED_OFF);
+		else
+			led_write(BOARD_LD_3, (0 == strcmp(args[2], "on")) ? BOARD_LED_ON : BOARD_LED_OFF);
+
+		return 0;
+	}
+	else
+	{
+		rt_kprintf("%s", help);
+		return 1;
+	}
+}
+MSH_CMD_EXPORT(led_ctrl, control specific led);
