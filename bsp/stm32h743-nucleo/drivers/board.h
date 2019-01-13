@@ -14,12 +14,6 @@
 #include <stm32h7xx.h>
 #include "stm32h7xx_hal.h"
 
-// <<< Use Configuration Wizard in Context Menu >>>
-/* board configuration */
-#define RT_USING_UART1
-#define RT_USING_UART2
-#define RT_USING_UART3
-
 // <o> SDCard Driver <1=>SDIO sdcard <0=>SPI MMC card
 //  <i>Default: 1
 #define STM32_USE_SDIO          0
@@ -34,8 +28,7 @@
 // </e>
 
 #ifdef __CC_ARM
-extern int Image$$RW_IRAM1$$ZI$$Limit;
-#define HEAP_BEGIN    (&Image$$RW_IRAM1$$ZI$$Limit)
+#define HEAP_BEGIN    (0x24000000)  // bind start addr to the AXI SRAM, this is the largest continues RAM in H7
 #elif __ICCARM__
 #pragma section="HEAP"
 #define HEAP_BEGIN    (__segment_end("HEAP"))
@@ -47,7 +40,9 @@ extern int __bss_end;
 // <o> Internal SRAM memory size[Kbytes] <8-64>
 //  <i>Default: 64
 #define STM32_SRAM_SIZE   (512 * 1024)
-#define HEAP_END          (0x24000000 + STM32_SRAM_SIZE)
+#define HEAP_END          (HEAP_BEGIN + STM32_SRAM_SIZE)
+
+#define STM32F7xx_PIN_NUMBERS 144
 
 void rt_hw_board_init(void);
 
