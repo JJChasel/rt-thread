@@ -16,6 +16,8 @@
 #include <string.h>
 #include <stdbool.h>
 
+static rt_thread_t g_tled = RT_NULL;
+
 void led_write(LedDesc led, LedStatus onoff)
 {
 	rt_pin_write((rt_base_t)led, (BOARD_LED_ON == onoff) ? PIN_HIGH : PIN_LOW);
@@ -30,6 +32,13 @@ static void led_thread_entry(void *parameter)
 		led_off();
 		rt_thread_delay(RT_TICK_PER_SECOND);
 	}
+}
+
+static void led_cleanup(rt_thread_t tid)
+{
+	(void)tid;
+	led_off();
+	g_tled = 0;
 }
 
 #ifndef RT_USING_PIN
@@ -60,20 +69,42 @@ int led_hw_init(void)
 INIT_APP_EXPORT(led_hw_init);
 #endif
 
-int led_init(void)
+int led_run(void)
 {
 	rt_thread_t tid;
+
+	if(RT_NULL != g_tled)
+	{
+		rt_kprintf("led already running...\n");
+		return 1;
+	}
 
 	tid = rt_thread_create("led",
 						   led_thread_entry, RT_NULL,
 						   512, 12, 5);
 
 	if (tid != RT_NULL)
+	{
+		tid->cleanup = led_cleanup;
+		g_tled = tid;
 		rt_thread_startup(tid);
+	}
 
 	return 0;
 }
-MSH_CMD_EXPORT(led_init, run led);
+MSH_CMD_EXPORT(led_run, run led);
+
+int led_stop(void)
+{
+	if(RT_NULL == g_tled)
+	{
+		rt_kprintf("led is not running...\n");
+		return 1;
+	}
+	rt_thread_delete(g_tled);
+	return 0;
+}
+MSH_CMD_EXPORT(led_stop, stop led);
 
 int led_ctrl(int arg, char *args[])
 {
