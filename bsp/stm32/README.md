@@ -29,6 +29,9 @@ STM32 系列 BSP 目前支持情况如下表所示：
 | **L4 系列** |  |
 | [stm32l432-st-nucleo](stm32l432-st-nucleo) | ST 官方 STM32L432-nucleo 开发板 |
 | [stm32l475-atk-pandora](stm32l475-atk-pandora/) | 正点原子 L475 潘多拉 IoT 开发板    |
+| **H7 系列** |  |
+| [stm32h743-st-nucleo](stm32h743-st-nucleo) | ST 官方 STM32H743-nucleo 开发板 |
+
 
 可以通过阅读相应 BSP 下的 README 来快速上手，如果想要使用 BSP 更多功能可参考 docs 文件夹下提供的说明文档，如下表所示：
 
