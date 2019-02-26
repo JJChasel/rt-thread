@@ -1,13 +1,12 @@
 /*
- * linker script for STM32H7xx with GNU ld
- * xiaonong 2015-08-07
+ * linker script for STM32H7XX with GNU ld
  */
 
 /* Program Entry, set to mark it as "used" and avoid gc */
 MEMORY
 {
-    CODE (rx) : ORIGIN = 0x08000000, LENGTH = 2048k /* 2048KB flash */
-    DATA (rw) : ORIGIN = 0x20000000, LENGTH =  128k /* 128K sram */
+    ROM (rx) : ORIGIN = 0x08000000, LENGTH = 2048k /* 2048KB flash */
+    RAM (rw) : ORIGIN = 0x20000000, LENGTH =  128k /* 128KB sram */
 }
 ENTRY(Reset_Handler)
 _system_stack_size = 0x200;
@@ -19,6 +18,7 @@ SECTIONS
         . = ALIGN(4);
         _stext = .;
         KEEP(*(.isr_vector))            /* Startup code */
+
         . = ALIGN(4);
         *(.text)                        /* remaining code */
         *(.text.*)                      /* remaining code */
@@ -33,22 +33,21 @@ SECTIONS
         __fsymtab_start = .;
         KEEP(*(FSymTab))
         __fsymtab_end = .;
+
         . = ALIGN(4);
         __vsymtab_start = .;
         KEEP(*(VSymTab))
         __vsymtab_end = .;
-        . = ALIGN(4);
 
         /* section information for initial. */
         . = ALIGN(4);
         __rt_init_start = .;
         KEEP(*(SORT(.rti_fn*)))
         __rt_init_end = .;
-        . = ALIGN(4);
 
         . = ALIGN(4);
         _etext = .;
-    } > CODE = 0
+    } > ROM = 0
 
     /* .ARM.exidx is sorted, so has to go in its own output section.  */
     __exidx_start = .;
@@ -58,7 +57,7 @@ SECTIONS
 
         /* This is used by the startup in order to initialize the .data secion */
         _sidata = .;
-    } > CODE
+    } > ROM
     __exidx_end = .;
 
     /* .data section which is used for initialized data */
@@ -76,14 +75,16 @@ SECTIONS
         . = ALIGN(4);
         /* This is used by the startup in order to initialize the .data secion */
         _edata = . ;
-    } >DATA
+    } >RAM
 
     .stack : 
     {
+        . = ALIGN(4);
+        _sstack = .;
         . = . + _system_stack_size;
         . = ALIGN(4);
         _estack = .;
-    } >DATA
+    } >RAM
 
     __bss_start = .;
     .bss :
@@ -101,7 +102,7 @@ SECTIONS
         _ebss = . ;
         
         *(.bss.init)
-    } > DATA
+    } > RAM
     __bss_end = .;
 
     _end = .;
