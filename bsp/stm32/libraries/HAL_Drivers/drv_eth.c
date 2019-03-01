@@ -48,6 +48,10 @@ static rt_bool_t tx_is_waiting = RT_FALSE;
 static  ETH_HandleTypeDef EthHandle;
 static struct rt_stm32_eth stm32_eth_device;
 static struct rt_semaphore tx_wait;
+#if defined(SOC_SERIES_STM32H7)
+static ETH_TxPacketConfig TxConfig;
+static ETH_MACConfigTypeDef MacConfig;
+#endif
 
 #if defined(ETH_RX_DUMP) || defined(ETH_TX_DUMP)
 #define __is_print(ch) ((unsigned int)((ch) - ' ') < 127u - ' ')
@@ -79,12 +83,29 @@ extern void phy_reset(void);
 /* EMAC initialization function */
 static rt_err_t rt_stm32_eth_init(rt_device_t dev)
 {
+#if defined(SOC_SERIES_STM32H7)
+    /* Enable Ethernet clocks */
+    __HAL_RCC_ETH1MAC_CLK_ENABLE();
+    __HAL_RCC_ETH1TX_CLK_ENABLE();
+    __HAL_RCC_ETH1RX_CLK_ENABLE();
+#else
     __HAL_RCC_ETH_CLK_ENABLE();
+#endif
 
     phy_reset();
 
     /* ETHERNET Configuration */
-    EthHandle.Instance = ETH;
+#if defined(SOC_SERIES_STM32H7)
+	EthHandle.Instance = ETH;
+    EthHandle.Init.MACAddr = (rt_uint8_t *)&stm32_eth_device.dev_addr[0];
+    EthHandle.Init.MediaInterface = HAL_ETH_RMII_MODE;
+    EthHandle.Init.RxDesc = DMARxDscrTab;
+    EthHandle.Init.TxDesc = DMATxDscrTab;
+
+    MacConfig.Speed = ETH_SPEED_100M;
+    MacConfig.DuplexMode = ETH_FULLDUPLEX_MODE;
+#else
+	EthHandle.Instance = ETH;
     EthHandle.Init.MACAddr = (rt_uint8_t *)&stm32_eth_device.dev_addr[0];
     EthHandle.Init.AutoNegotiation = ETH_AUTONEGOTIATION_DISABLE;
     EthHandle.Init.Speed = ETH_SPEED_100M;
@@ -92,6 +113,7 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
     EthHandle.Init.MediaInterface = ETH_MEDIA_INTERFACE_RMII;
     EthHandle.Init.RxMode = ETH_RXINTERRUPT_MODE;
     EthHandle.Init.ChecksumMode = ETH_CHECKSUM_BY_SOFTWARE;
+#endif
 
     HAL_ETH_DeInit(&EthHandle);
 
@@ -103,6 +125,7 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
     }
     else
     {
+#if !defined(SOC_SERIES_STM32H7)
         LOG_D("eth hardware init success");
     }
 
@@ -111,6 +134,24 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
 
     /* Initialize Rx Descriptors list: Chain Mode  */
     HAL_ETH_DMARxDescListInit(&EthHandle, DMARxDscrTab, Rx_Buff, ETH_RXBUFNB);
+
+#else
+        if( HAL_ETH_SetMACConfig(&EthHandle, &MacConfig) != HAL_OK)
+        {
+            LOG_E("eth hardware init failed");
+            return -RT_ERROR;
+        }
+        else
+        {
+            LOG_D("eth hardware init success");
+        }
+    }
+
+    for (int idx = 0; idx < ETH_RX_DESC_CNT; idx++)
+    {
+        HAL_ETH_DescAssignMemory(&EthHandle, idx, Rx_Buff + idx * ETH_MAX_PACKET_SIZE, NULL);
+    }
+#endif
 
     /* ETH interrupt Init */
     HAL_NVIC_SetPriority(ETH_IRQn, 0x07, 0);
