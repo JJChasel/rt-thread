@@ -16,11 +16,6 @@
 #include <rtdevice.h>
 #include <board.h>
 
-/* Eth Packet Size Set For Newer HAL lib */
-#ifndef ETH_TX_BUF_SIZE
-#define ETH_TX_BUF_SIZE ETH_MAX_PACKET_SIZE
-#endif
-
 /* The PHY basic control register */
 #define PHY_BASIC_CONTROL_REG       0x00U
 #define PHY_RESET_MASK              (1<<15)

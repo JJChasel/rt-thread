@@ -29,6 +29,33 @@
 
 #define MAX_ADDR_LEN 6
 
+#if defined(SOC_SERIES_STM32H7)
+
+/* Eth Packet Size Set For New HAL lib */
+#ifndef ETH_TX_BUF_SIZE
+#define ETH_TX_BUF_SIZE         ETH_MAX_PACKET_SIZE
+#endif
+
+#ifndef ETH_RX_BUF_SIZE
+#define ETH_RX_BUF_SIZE         ETH_MAX_PACKET_SIZE
+#endif
+
+/* compatible to older lib */
+#define ETH_MODE_FULLDUPLEX     ETH_FULLDUPLEX_MODE
+#define ETH_MODE_HALFDUPLEX     ETH_HALFDUPLEX_MODE
+
+#define ETH_TXBUFNB             ETH_TX_DESC_CNT
+#define ETH_RXBUFNB             ETH_RX_DESC_CNT
+
+uint32_t g_phy_addr;
+#define HAL_ETH_ReadPHYRegister(heth, reg, value)    HAL_ETH_ReadPHYRegister(heth, g_phy_addr, reg, value)
+#define HAL_ETH_WritePHYRegister(heth, reg, value)   HAL_ETH_WritePHYRegister(heth, g_phy_addr, reg, value)
+
+/* see [stm32h7xx reference manual] chapter 60.1 */
+#define UID_BASE                (0x1FF1E800)
+
+#endif // #if defined(SOC_SERIES_STM32H7)
+
 struct rt_stm32_eth
 {
     /* inherit from ethernet device */
@@ -500,7 +527,11 @@ static void phy_monitor_thread_entry(void *parameter)
     rt_uint32_t i, temp;
     for (i = 0; i <= 0x1F; i++)
     {
+#if defined(SOC_SERIES_STM32H7)
+        g_phy_addr = i;
+#else
         EthHandle.Init.PhyAddress = i;
+#endif
 
         HAL_ETH_ReadPHYRegister(&EthHandle, PHY_ID1_REG, (uint32_t *)&temp);
 
