@@ -32,13 +32,8 @@
 #if defined(SOC_SERIES_STM32H7)
 
 /* Eth Packet Size Set For New HAL lib */
-#ifndef ETH_TX_BUF_SIZE
 #define ETH_TX_BUF_SIZE         ETH_MAX_PACKET_SIZE
-#endif
-
-#ifndef ETH_RX_BUF_SIZE
 #define ETH_RX_BUF_SIZE         ETH_MAX_PACKET_SIZE
-#endif
 
 /* compatible to older lib */
 #define ETH_MODE_FULLDUPLEX     ETH_FULLDUPLEX_MODE
@@ -69,16 +64,49 @@ struct rt_stm32_eth
     uint32_t    ETH_Mode;
 };
 
-static ETH_DMADescTypeDef *DMARxDscrTab, *DMATxDscrTab;
-static rt_uint8_t *Rx_Buff, *Tx_Buff;
 static rt_bool_t tx_is_waiting = RT_FALSE;
 static  ETH_HandleTypeDef EthHandle;
 static struct rt_stm32_eth stm32_eth_device;
 static struct rt_semaphore tx_wait;
+
 #if defined(SOC_SERIES_STM32H7)
 static ETH_TxPacketConfig TxConfig;
 static ETH_MACConfigTypeDef MacConfig;
 #endif
+/* rx and tx buffers declaration */
+#if defined(SOC_SERIES_STM32H7)
+/* for stm32h743, use SRAM1 as static buffer */
+#if defined(__ICCARM__) /*!< IAR Compiler */
+
+#pragma location = 0x30040000
+ETH_DMADescTypeDef DMARxDscrTab[ETH_RXBUFNB]; /* Ethernet Rx DMA Descriptors */
+#pragma location = 0x30040060
+ETH_DMADescTypeDef DMATxDscrTab[ETH_TXBUFNB]; /* Ethernet Tx DMA Descriptors */
+#pragma location = 0x30040200
+uint8_t Rx_Buff[ETH_RXBUFNB][ETH_RX_BUF_SIZE]; /* Ethernet Receive Buffers */
+#pragma location = 0x30041A00
+uint8_t Tx_Buff[ETH_TXBUFNB][ETH_TX_BUF_SIZE]; /* Ethernet Receive Buffers */
+
+#elif defined(__CC_ARM) /* MDK ARM Compiler */
+
+__attribute__((section(".RxDecripSection"))) ETH_DMADescTypeDef DMARxDscrTab[ETH_RXBUFNB];        /* Ethernet Rx DMA Descriptors */
+__attribute__((section(".TxDecripSection"))) ETH_DMADescTypeDef DMATxDscrTab[ETH_TXBUFNB];        /* Ethernet Tx DMA Descriptors */
+__attribute__((section(".RxArraySection"))) uint8_t Rx_Buff[ETH_RXBUFNB][ETH_RX_BUF_SIZE];        /* Ethernet Receive Buffer */
+__attribute__((section(".TxArraySection"))) uint8_t Tx_Buff[ETH_TXBUFNB][ETH_TX_BUF_SIZE];        /* Ethernet Transmit Buffer */
+
+#elif defined(__GNUC__) /* GNU Compiler */
+
+ETH_DMADescTypeDef DMARxDscrTab[ETH_RXBUFNB] __attribute__((section(".RxDecripSection")));        /* Ethernet Rx DMA Descriptors */
+ETH_DMADescTypeDef DMATxDscrTab[ETH_TXBUFNB] __attribute__((section(".TxDecripSection")));        /* Ethernet Tx DMA Descriptors */
+uint8_t Rx_Buff[ETH_RXBUFNB][ETH_RX_BUF_SIZE] __attribute__((section(".RxArraySection")));        /* Ethernet Receive Buffers */
+uint8_t Tx_Buff[ETH_TXBUFNB][ETH_TX_BUF_SIZE] __attribute__((section(".TxArraySection")));        /* Ethernet Transmit Buffer */
+
+#endif
+
+#else // defined(SOC_SERIES_STM32H7)
+static rt_uint8_t *Rx_Buff, *Tx_Buff;
+static ETH_DMADescTypeDef *DMARxDscrTab, *DMATxDscrTab;
+#endif // defined(SOC_SERIES_STM32H7)
 
 #if defined(ETH_RX_DUMP) || defined(ETH_TX_DUMP)
 #define __is_print(ch) ((unsigned int)((ch) - ' ') < 127u - ' ')
@@ -128,9 +156,7 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
     EthHandle.Init.MediaInterface = HAL_ETH_RMII_MODE;
     EthHandle.Init.RxDesc = DMARxDscrTab;
     EthHandle.Init.TxDesc = DMATxDscrTab;
-
-    MacConfig.Speed = ETH_SPEED_100M;
-    MacConfig.DuplexMode = ETH_FULLDUPLEX_MODE;
+    EthHandle.Init.RxBuffLen = ETH_RX_BUF_SIZE;
 #else
 	EthHandle.Instance = ETH;
     EthHandle.Init.MACAddr = (rt_uint8_t *)&stm32_eth_device.dev_addr[0];
@@ -152,32 +178,25 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
     }
     else
     {
-#if !defined(SOC_SERIES_STM32H7)
         LOG_D("eth hardware init success");
     }
 
+#if defined(SOC_SERIES_STM32H7)
+    for (int idx = 0; idx < ETH_RXBUFNB; idx++)
+    {
+        HAL_ETH_DescAssignMemory(&EthHandle, idx, Rx_Buff[idx], NULL);
+    }
+
+    HAL_ETH_GetMACConfig(&EthHandle, &MacConfig);
+    MacConfig.DuplexMode = ETH_MODE_FULLDUPLEX;
+    MacConfig.Speed = ETH_SPEED_100M;
+    HAL_ETH_SetMACConfig(&EthHandle, &MacConfig);
+#else
     /* Initialize Tx Descriptors list: Chain Mode */
     HAL_ETH_DMATxDescListInit(&EthHandle, DMATxDscrTab, Tx_Buff, ETH_TXBUFNB);
 
     /* Initialize Rx Descriptors list: Chain Mode  */
     HAL_ETH_DMARxDescListInit(&EthHandle, DMARxDscrTab, Rx_Buff, ETH_RXBUFNB);
-
-#else
-        if( HAL_ETH_SetMACConfig(&EthHandle, &MacConfig) != HAL_OK)
-        {
-            LOG_E("eth hardware init failed");
-            return -RT_ERROR;
-        }
-        else
-        {
-            LOG_D("eth hardware init success");
-        }
-    }
-
-    for (int idx = 0; idx < ETH_RX_DESC_CNT; idx++)
-    {
-        HAL_ETH_DescAssignMemory(&EthHandle, idx, Rx_Buff + idx * ETH_MAX_PACKET_SIZE, NULL);
-    }
 #endif
 
     /* ETH interrupt Init */
@@ -185,7 +204,11 @@ static rt_err_t rt_stm32_eth_init(rt_device_t dev)
     HAL_NVIC_EnableIRQ(ETH_IRQn);
 
     /* Enable MAC and DMA transmission and reception */
+#if defined(SOC_SERIES_STM32H7)
+    if (HAL_ETH_Start_IT(&EthHandle) == HAL_OK)
+#else
     if (HAL_ETH_Start(&EthHandle) == HAL_OK)
+#endif
     {
         LOG_D("emac hardware start");
     }
@@ -243,6 +266,60 @@ static rt_err_t rt_stm32_eth_control(rt_device_t dev, int cmd, void *args)
 
 /* ethernet device interface */
 /* transmit data*/
+#if defined(SOC_SERIES_STM32H7)
+rt_err_t rt_stm32_eth_tx(rt_device_t dev, struct pbuf *p)
+{
+    ETH_BufferTypeDef txbuffers[ETH_TXBUFNB];
+
+    memset(txbuffers, 0, sizeof(txbuffers));
+
+    int idx = 0;
+    for (struct pbuf *q = p; q != NULL && idx < ETH_TXBUFNB; q = q->next)
+    {
+        txbuffers[idx].buffer = Tx_Buff[idx];
+        memcpy(txbuffers[idx].buffer, q->payload, q->len);
+
+        txbuffers[idx].len = q->len;
+
+        if(p->next == NULL)
+            txbuffers[idx].next = NULL;
+        else
+            txbuffers[idx].next = &txbuffers[idx + 1];
+
+        if ((idx == ETH_TXBUFNB - 1) && (p->next != NULL))
+            return -RT_ERROR;
+
+        ++idx;
+    }
+
+    /* set len and bind buffer */
+    TxConfig.Length = p->tot_len;
+    TxConfig.TxBuffer = txbuffers;
+    TxConfig.ChecksumCtrl = ETH_CHECKSUM_DISABLE;
+
+    LOG_D("frame: len=%d", TxConfig.Length);
+
+    int level;
+    if (HAL_ETH_Transmit_IT(&EthHandle, &TxConfig) != HAL_OK)
+    {
+        level = rt_hw_interrupt_disable();
+        tx_is_waiting = RT_FALSE;
+        rt_hw_interrupt_enable(level);
+
+        LOG_E("frame send fail");
+    }
+    else
+    {
+        level = rt_hw_interrupt_disable();
+        tx_is_waiting = RT_TRUE;
+        rt_hw_interrupt_enable(level);
+
+        rt_sem_take(&tx_wait, RT_WAITING_FOREVER);
+    }
+
+    return 0;
+}
+#else
 rt_err_t rt_stm32_eth_tx(rt_device_t dev, struct pbuf *p)
 {
     rt_err_t ret = RT_ERROR;
@@ -353,8 +430,41 @@ error:
 
     return ret;
 }
+#endif
 
 /* receive data*/
+#if defined(SOC_SERIES_STM32H7)
+struct pbuf *rt_stm32_eth_rx(rt_device_t dev)
+{
+    struct pbuf *p = NULL;
+    ETH_BufferTypeDef rxbuffwk;
+    uint32_t framelength = 0;
+
+    if (HAL_ETH_GetRxDataBuffer(&EthHandle, &rxbuffwk) == HAL_OK)
+    {
+        HAL_ETH_GetRxDataLength(&EthHandle, &framelength);
+
+        /* Invalidate data cache for ETH Rx Buffers */
+        SCB_InvalidateDCache_by_Addr((uint32_t *)Rx_Buff, framelength);
+
+        p = pbuf_alloc(PBUF_RAW, framelength, PBUF_POOL);
+
+        if (p != NULL)
+        {
+            pbuf_take(p, rxbuffwk.buffer, framelength);
+        }
+        else
+        {
+            LOG_D("No Mem!");
+        }
+    }
+
+    /* Build Rx descriptor to be ready for next data reception */
+    HAL_ETH_BuildRxDescriptors(&EthHandle);
+
+    return p;
+}
+#else
 struct pbuf *rt_stm32_eth_rx(rt_device_t dev)
 {
 
@@ -446,6 +556,7 @@ struct pbuf *rt_stm32_eth_rx(rt_device_t dev)
 
     return p;
 }
+#endif
 
 /* interrupt service routine */
 void ETH_IRQHandler(void)
@@ -651,6 +762,7 @@ static int rt_hw_stm32_eth_init(void)
 {
     rt_err_t state = RT_EOK;
 
+#if !defined(SOC_SERIES_STM32H7)
     /* Prepare receive and send buffers */
     Rx_Buff = (rt_uint8_t *)rt_calloc(ETH_RXBUFNB, ETH_MAX_PACKET_SIZE);
     if (Rx_Buff == RT_NULL)
@@ -683,6 +795,7 @@ static int rt_hw_stm32_eth_init(void)
         state = -RT_ENOMEM;
         goto __exit;
     }
+#endif
 
     stm32_eth_device.ETH_Speed = ETH_SPEED_100M;
     stm32_eth_device.ETH_Mode  = ETH_MODE_FULLDUPLEX;
@@ -743,6 +856,7 @@ static int rt_hw_stm32_eth_init(void)
 __exit:
     if (state != RT_EOK)
     {
+#if !defined(SOC_SERIES_STM32H7)
         if (Rx_Buff)
         {
             rt_free(Rx_Buff);
@@ -762,6 +876,7 @@ __exit:
         {
             rt_free(DMATxDscrTab);
         }
+#endif
     }
 
     return state;
